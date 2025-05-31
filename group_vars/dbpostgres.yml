@@ -1,0 +1,6 @@
+docker_containers:
+  - name: db
+    image: postgres
+    env:
+      POSTGRES_PASSWORD: votingapp
+    ports: ["5432:5432"]

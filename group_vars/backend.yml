@@ -1,0 +1,7 @@
+docker_containers:
+  - name: worker
+    image: sfischer46/worker
+
+  - name: redis
+    image: redis
+    ports: ["6379:6379"]
