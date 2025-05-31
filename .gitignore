@@ -1,0 +1,7 @@
+.terraform/
+*.log
+*.tfstate*
+__pycache__/
+*.retry
+*.pyc
+*.swp
