@@ -10,3 +10,5 @@ ansible/.DS_Store
 .terraform/
 .terraform.lock.hcl
 
+.terraform/
+.terraform.lock.hcl
