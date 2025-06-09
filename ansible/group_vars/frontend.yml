@@ -1,0 +1,8 @@
+docker_containers:
+  - name: vote
+    image: sfischer46/vote
+    ports: ["80:80"]
+
+  - name: result
+    image: sfischer46/result
+    ports: ["5001:80"]

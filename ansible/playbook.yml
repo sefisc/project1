@@ -1,0 +1,126 @@
+- name: Setup voting app stack
+  hosts: all
+  become: yes
+
+  vars:
+    docker_containers: []
+
+  tasks:
+    - name: Update apt packages
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Start and enable Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Install python3-docker via apt
+      ansible.builtin.apt:
+        name: python3-docker
+        state: present
+        update_cache: yes
+
+    - name: Create Docker network back-tier (only on backend)
+      community.docker.docker_network:
+        name: back-tier
+        state: present
+      when: inventory_hostname == "backend"
+
+    - name: Set container configs for frontend
+      set_fact:
+        docker_containers: "{{ docker_containers + [
+          {
+            'name': 'voting-frontend',
+            'image': 'sfischer46/vote:2.0',
+            'ports': ['80:80'],
+            'env': {
+              'REDIS_HOST': '10.0.4.51'
+            }
+          },
+          {
+            'name': 'voting-result',
+            'image': 'sfischer46/result:2.0',
+            'ports': ['5001:80'],
+            'env': {
+              'PG_HOST': '10.0.5.211'
+            }
+          }
+        ] }}"
+      when: inventory_hostname == "frontend"
+
+    - name: Set container config for backend worker
+      set_fact:
+        docker_containers: "{{ docker_containers + [
+          {
+            'name': 'voting-backend',
+            'image': 'sfischer46/worker:2.0',
+            'env': {
+              'DB_HOST': '10.0.5.211'
+            },
+            'networks': [{'name': 'back-tier'}]
+          }
+        ] }}"
+      when: inventory_hostname == "backend"
+
+    - name: Set container config for Redis
+      set_fact:
+        docker_containers: "{{ docker_containers + [
+          {
+            'name': 'redis',
+            'image': 'redis',
+            'ports': ['6379:6379'],
+            'networks': [{'name': 'back-tier'}]
+          }
+        ] }}"
+      when: inventory_hostname == "backend"
+
+    - name: Set container config for database
+      set_fact:
+        docker_containers: "{{ docker_containers + [
+          {
+            'name': 'voting-db',
+            'image': 'postgres:15-alpine',
+            'ports': ['5432:5432'],
+            'env': {
+              'POSTGRES_DB': 'voting',
+              'POSTGRES_USER': 'postgres',
+              'POSTGRES_PASSWORD': 'postgres'
+            },
+            'volumes': ['db-data:/var/lib/postgresql/data']
+          }
+        ] }}"
+      when: inventory_hostname == "dbpostgres"
+
+    - name: Pull and run Docker containers
+      community.docker.docker_container:
+        name: "{{ item.name }}"
+        image: "{{ item.image }}"
+        ports: "{{ item.ports | default(omit) }}"
+        env: "{{ item.env | default(omit) }}"
+        networks: "{{ item.networks | default(omit) }}"
+        volumes: "{{ item.volumes | default(omit) }}"
+        state: started
+        restart_policy: always
+      loop: "{{ docker_containers }}"
+
+    - name: Create docker volume for DB (only on dbpostgres host)
+      community.docker.docker_volume:
+        name: db-data
+        state: present
+      when: inventory_hostname == "dbpostgres"
